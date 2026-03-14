@@ -37,6 +37,7 @@ async def wizard_step_find_clinics(req: FindClinicsRequest):
 
 class GetSlotsRequest(BaseModel):
     google_token: str
+    refresh_token: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
 
@@ -45,13 +46,14 @@ class GetSlotsRequest(BaseModel):
 def wizard_step_get_slots(req: GetSlotsRequest):
     """Step 2: Get available calendar slots (defaults to next 7 days)."""
     try:
-        return wizard_get_slots(req.google_token, req.start_date, req.end_date)
+        return wizard_get_slots(req.google_token, req.start_date, req.end_date, req.refresh_token)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 class BookRequest(BaseModel):
     google_token: str
+    refresh_token: Optional[str] = None
     clinic_name: str
     clinic_address: str
     start_datetime: str
@@ -68,6 +70,7 @@ def wizard_step_book(req: BookRequest):
             req.clinic_address,
             req.start_datetime,
             req.end_datetime,
+            req.refresh_token,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

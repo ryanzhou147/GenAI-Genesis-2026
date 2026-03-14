@@ -1,5 +1,8 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
+import ChatPage from "./ChatPage";
+import { HabitCoachPrompt, useHabitCoachPrompt } from "./HabitCoachPrompt";
+import { SunlifePrompt, useSunlifePrompt } from "./SunlifePrompt";
 
 // ── World dimensions ─────────────────────────────────────────────────────────
 const WORLD_W = 1572;
@@ -20,12 +23,11 @@ const SPRITES: Record<string, string> = {
   right: "/char_right.png",
 };
 
-// Agent zones — kept but never rendered
+// Agent zones — calibrated world positions with activation radius
 const AGENT_ZONES = [
-  { id: "treatment",  wx: 212,  wy: 135, r: 68 },
-  { id: "dental",     wx: 428,  wy: 112, r: 68 },
-  { id: "habit",      wx: 398,  wy: 290, r: 68 },
-  { id: "financial",  wx: 1205, wy: 700, r: 68 },
+  { id: "habit",     label: "Habit Coach",       emoji: "🪥", wx: 493, wy: 259, r: 80 },
+  { id: "clinic",    label: "Clinic Locator",    emoji: "📍", wx: 737, wy: 416, r: 80 },
+  { id: "financial", label: "Financial Planner", emoji: "💰", wx: 576, wy: 634, r: 80 },
 ];
 
 // ── Flow stages ──────────────────────────────────────────────────────────────
@@ -55,6 +57,260 @@ const STAGE_IMAGES: Partial<Record<Stage, string>> = {
 
 const FLASH_DURATION = 2000; // ms — camera flash + fade
 
+// ── Agent Modal ───────────────────────────────────────────────────────────────
+
+type AgentStep = { label: string; done: boolean };
+
+function AgentModal({ agentId, onClose }: { agentId: string; onClose: () => void }) {
+  const zone = AGENT_ZONES.find((z) => z.id === agentId)!;
+
+  const STEPS: Record<string, AgentStep[]> = {
+    habit: [
+      { label: "Reviewing dental scan analysis…", done: false },
+      { label: "Identifying hygiene gaps…", done: false },
+      { label: "Generating personalized coaching plan…", done: false },
+    ],
+    clinic: [
+      { label: "Detecting your location…", done: false },
+      { label: "Searching nearby dental clinics…", done: false },
+      { label: "Checking calendar availability…", done: false },
+    ],
+    financial: [
+      { label: "Analyzing treatment costs…", done: false },
+      { label: "Reviewing insurance coverage…", done: false },
+      { label: "Calculating out-of-pocket estimates…", done: false },
+    ],
+  };
+
+  const [steps, setSteps] = useState<AgentStep[]>(STEPS[agentId] ?? []);
+  const [result, setResult] = useState<string | null>(null);
+  const [showClinic, setShowClinic] = useState(false);
+
+  useEffect(() => {
+    // Animate steps sequentially then fetch API
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    steps.forEach((_, i) => {
+      timers.push(setTimeout(() => {
+        setSteps((prev) => prev.map((s, j) => j === i ? { ...s, done: true } : s));
+      }, 900 * (i + 1)));
+    });
+
+    // After all steps, fetch the agent
+    const delay = 900 * (steps.length + 1);
+    timers.push(setTimeout(async () => {
+      const endpointMap: Record<string, string> = {
+        habit:     "http://localhost:8000/agents/habit-coaching",
+        clinic:    "http://localhost:8000/agents/clinic-locator",
+        financial: "http://localhost:8000/agents/financial",
+      };
+      try {
+        const res = await fetch(endpointMap[agentId]);
+        const data = await res.json();
+        setResult(JSON.stringify(data, null, 2));
+      } catch {
+        setResult("Agent ready.");
+      }
+    }, delay));
+
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId]);
+
+  const allDone = steps.every((s) => s.done);
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 100,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(0,0,0,0.65)",
+        backdropFilter: "blur(4px)",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        style={{
+          background: "rgba(8,10,20,0.97)",
+          border: "1.5px solid rgba(255,255,255,0.12)",
+          borderRadius: 20,
+          width: showClinic ? "min(90vw, 780px)" : "min(90vw, 560px)",
+          maxHeight: showClinic ? "85vh" : undefined,
+          overflow: showClinic ? "hidden" : undefined,
+          boxShadow: "0 0 60px rgba(96,165,250,0.15), 0 8px 40px rgba(0,0,0,0.6)",
+          display: "flex", flexDirection: "column",
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px 16px",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          flexShrink: 0,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 24 }}>{zone.emoji}</span>
+            <div>
+              <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{zone.label}</div>
+              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 1 }}>
+                AI Agent · {agentId === "clinic" ? "Active" : agentId === "habit" ? "Implemented" : "Scaffolded"}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "rgba(255,255,255,0.07)", border: "none", borderRadius: 8,
+              color: "rgba(255,255,255,0.6)", cursor: "pointer",
+              width: 32, height: 32, fontSize: 16,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >✕</button>
+        </div>
+
+        {/* Clinic full UI */}
+        {showClinic ? (
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            <ChatPage />
+          </div>
+        ) : (
+          <div style={{ padding: "24px" }}>
+            {/* Workflow steps */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+              {steps.map((step, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    opacity: step.done ? 1 : i === steps.findIndex((s) => !s.done) ? 0.85 : 0.35,
+                    transition: "opacity 0.4s ease",
+                  }}
+                >
+                  <div style={{
+                    width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+                    background: step.done ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.05)",
+                    border: step.done
+                      ? "1.5px solid rgba(74,222,128,0.8)"
+                      : i === steps.findIndex((s) => !s.done)
+                        ? "1.5px solid rgba(96,165,250,0.8)"
+                        : "1.5px solid rgba(255,255,255,0.15)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 11,
+                    animation: !step.done && i === steps.findIndex((s) => !s.done)
+                      ? "stepPulse 1.2s ease-in-out infinite" : undefined,
+                  }}>
+                    {step.done ? "✓" : ""}
+                  </div>
+                  <span style={{
+                    color: step.done ? "rgba(74,222,128,0.9)" : "rgba(255,255,255,0.75)",
+                    fontSize: 13,
+                  }}>
+                    {step.label}
+                    {!step.done && i === steps.findIndex((s) => !s.done) && (
+                      <span style={{ marginLeft: 4, opacity: 0.6 }}>
+                        <span style={{ animation: "dot1 1.2s ease-in-out infinite" }}>.</span>
+                        <span style={{ animation: "dot2 1.2s ease-in-out infinite" }}>.</span>
+                        <span style={{ animation: "dot3 1.2s ease-in-out infinite" }}>.</span>
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Result */}
+            {allDone && result && (
+              <div style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 12,
+                padding: "16px",
+                animation: "fadeInUp 0.4s ease forwards",
+              }}>
+                {agentId === "habit" && (
+                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, lineHeight: 1.7 }}>
+                    <div style={{ color: "rgba(74,222,128,0.9)", fontWeight: 700, marginBottom: 10, fontSize: 14 }}>
+                      Coaching Plan Ready
+                    </div>
+                    <ul style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: 6 }}>
+                      <li>Brush for 2 minutes, twice daily with fluoride toothpaste</li>
+                      <li>Floss at least once per day — prioritize before bedtime</li>
+                      <li>Rinse with antiseptic mouthwash to reduce plaque</li>
+                      <li>Reduce sugary snacks between meals</li>
+                      <li>Schedule a cleaning every 6 months</li>
+                    </ul>
+                  </div>
+                )}
+                {agentId === "financial" && (
+                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, lineHeight: 1.7 }}>
+                    <div style={{ color: "rgba(74,222,128,0.9)", fontWeight: 700, marginBottom: 10, fontSize: 14 }}>
+                      Cost Estimate
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      {[
+                        ["Cleaning & Exam", "$180", "$0"],
+                        ["Cavity Filling (×2)", "$420", "$84"],
+                        ["X-Rays", "$90", "$18"],
+                        ["Total Estimate", "$690", "$102"],
+                      ].map(([item, cost, oop]) => (
+                        <div key={item} style={{ display: "contents" }}>
+                          <span style={{ opacity: 0.7 }}>{item}</span>
+                          <span style={{ textAlign: "right" }}>
+                            <span style={{ opacity: 0.5, textDecoration: "line-through", marginRight: 8 }}>{cost}</span>
+                            <span style={{ color: "rgba(74,222,128,0.9)", fontWeight: 600 }}>{oop} OOP</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {agentId === "clinic" && (
+                  <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 13, lineHeight: 1.7 }}>
+                    <div style={{ color: "rgba(74,222,128,0.9)", fontWeight: 700, marginBottom: 10, fontSize: 14 }}>
+                      Agent Ready
+                    </div>
+                    <p style={{ marginBottom: 14 }}>
+                      The Clinic Locator will find dental clinics near you and help schedule an appointment on your Google Calendar.
+                    </p>
+                    <button
+                      onClick={() => setShowClinic(true)}
+                      style={{
+                        background: "rgba(96,165,250,0.15)",
+                        border: "1.5px solid rgba(96,165,250,0.5)",
+                        borderRadius: 10, padding: "10px 20px",
+                        color: "rgba(147,197,253,1)", cursor: "pointer",
+                        fontSize: 13, fontWeight: 600,
+                        transition: "background 0.2s ease",
+                      }}
+                    >
+                      Open Clinic Finder →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes stepPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(96,165,250,0.4); }
+          50%       { box-shadow: 0 0 0 4px rgba(96,165,250,0.15); }
+        }
+        @keyframes dot1 { 0%,60%,100% { opacity:0 } 20% { opacity:1 } }
+        @keyframes dot2 { 0%,80%,100% { opacity:0 } 40% { opacity:1 } }
+        @keyframes dot3 { 0%,100% { opacity:0 } 60% { opacity:1 } }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function DentistOffice() {
   const [stage, setStage]                     = useState<Stage>(0);
   const [flash, setFlash]                     = useState(false);
@@ -64,6 +320,22 @@ export default function DentistOffice() {
   const [zoomPhase, setZoomPhase]   = useState<"idle"|"fadein"|"zooming">("idle");
   const [zoomOpacity, setZoomOpacity] = useState(0);
   const [zoomScale,   setZoomScale]   = useState(3.7);
+
+  // Agent interaction
+  const [nearbyZone, setNearbyZone]   = useState<string | null>(null);
+  const nearbyZoneRef                 = useRef<string | null>(null);
+  const [activeAgent, setActiveAgent] = useState<string | null>(null);
+
+  // Habit coach prompt
+  const {
+    isLoading:      habitLoading,
+    analysisResult: habitResult,
+    startAnalysis:  startHabitAnalysis,
+    setAnalysisResult: setHabitResult,
+  } = useHabitCoachPrompt();
+
+  // Sun Life prompt
+  const { isOpen: sunlifeOpen, openSunlifePrompt, closeSunlifePrompt } = useSunlifePrompt();
 
   // Viewport size — needed to account for objectFit:contain letterboxing
   const [vp, setVp] = useState({ w: 1920, h: 1080 });
@@ -95,6 +367,8 @@ export default function DentistOffice() {
 
     // Arrow keys only work after movement is unlocked
     if (movementUnlocked.current && arrowKeys.includes(e.key)) return;
+    // Space near an agent → open modal, don't advance stage
+    if ((e.key === " " || e.code === "Space") && movementUnlocked.current && nearbyZoneRef.current) return;
     if (s === 2 || s === 3) return; // upload stage
     if (advancingRef.current) return;
 
@@ -162,8 +436,26 @@ export default function DentistOffice() {
       }
     };
     const onUp = (e: KeyboardEvent) => keysRef.current.delete(e.key);
+
+    // Space to interact with nearby agent
+    const onSpace = (e: KeyboardEvent) => {
+      if ((e.key === " " || e.code === "Space") && nearbyZoneRef.current) {
+        e.preventDefault();
+        const zone = nearbyZoneRef.current;
+        if (zone === "habit") {
+          setHabitResult(null);
+          setActiveAgent("habit");
+        } else if (zone === "financial") {
+          openSunlifePrompt();
+        } else {
+          setActiveAgent(zone);
+        }
+      }
+    };
+
     window.addEventListener("keydown", onDown);
     window.addEventListener("keyup",   onUp);
+    window.addEventListener("keydown", onSpace);
 
     const loop = () => {
       const keys = keysRef.current;
@@ -173,18 +465,31 @@ export default function DentistOffice() {
       if (keys.has("ArrowUp"))    dy -= SPEED;
       if (keys.has("ArrowDown"))  dy += SPEED;
 
+      let nx = posRef.current.x;
+      let ny = posRef.current.y;
+
       if (dx !== 0 || dy !== 0) {
         if (Math.abs(dx) >= Math.abs(dy)) setDir(dx > 0 ? "right" : "left");
         else                               setDir(dy > 0 ? "front" : "back");
 
-        const nx = Math.max(0, Math.min(WORLD_W - CHAR_W, posRef.current.x + dx));
-        const ny = Math.max(0, Math.min(WORLD_H - CHAR_H, posRef.current.y + dy));
+        nx = Math.max(0, Math.min(WORLD_W - CHAR_W, posRef.current.x + dx));
+        ny = Math.max(0, Math.min(WORLD_H - CHAR_H, posRef.current.y + dy));
         posRef.current = { x: nx, y: ny };
         setPos({ x: nx, y: ny });
+      }
 
-        // Proximity detection (unused visually)
-        const cx = nx + CHAR_W / 2, cy = ny + CHAR_H / 2;
-        for (const az of AGENT_ZONES) Math.hypot(cx - az.wx, cy - az.wy) < az.r;
+      // Proximity detection — always check every frame
+      const cx = nx + CHAR_W / 2, cy = ny + CHAR_H / 2;
+      let nearest: string | null = null;
+      for (const az of AGENT_ZONES) {
+        if (Math.hypot(cx - az.wx, cy - az.wy) < az.r) {
+          nearest = az.id;
+          break;
+        }
+      }
+      if (nearest !== nearbyZoneRef.current) {
+        nearbyZoneRef.current = nearest;
+        setNearbyZone(nearest);
       }
 
       rafRef.current = requestAnimationFrame(loop);
@@ -194,6 +499,7 @@ export default function DentistOffice() {
     return () => {
       window.removeEventListener("keydown", onDown);
       window.removeEventListener("keyup",   onUp);
+      window.removeEventListener("keydown", onSpace);
       cancelAnimationFrame(rafRef.current);
     };
   }, [stage]);
@@ -345,6 +651,14 @@ export default function DentistOffice() {
           40%  { transform: scale(1.5); filter: drop-shadow(0 0 18px rgba(255,255,180,0.9)) drop-shadow(0 3px 5px rgba(0,0,0,0.55)); }
           100% { transform: scale(1);   filter: drop-shadow(0 3px 5px rgba(0,0,0,0.55)); }
         }
+        @keyframes circleIdle {
+          0%, 100% { opacity: 0.45; box-shadow: 0 0 10px 2px rgba(96,165,250,0.3); }
+          50%       { opacity: 0.6;  box-shadow: 0 0 14px 4px rgba(96,165,250,0.4); }
+        }
+        @keyframes circleActive {
+          0%, 100% { opacity: 0.9; box-shadow: 0 0 18px 6px rgba(74,222,128,0.5), 0 0 40px 10px rgba(74,222,128,0.2); }
+          50%       { opacity: 1;   box-shadow: 0 0 28px 10px rgba(74,222,128,0.7), 0 0 60px 16px rgba(74,222,128,0.3); }
+        }
       `}</style>
 
       {/* ── Background layer ──────────────────────────────────────────────── */}
@@ -406,6 +720,63 @@ export default function DentistOffice() {
         />
       )}
 
+      {/* ── Agent activation circles ─────────────────────────────────────── */}
+      {showChar && AGENT_ZONES.map((az) => {
+        const cx = imgLeft + az.wx * imgScale;
+        const cy = imgTop  + az.wy * imgScale;
+        const r  = az.r * imgScale;
+        const isNear = nearbyZone === az.id;
+
+        return (
+          <div
+            key={az.id}
+            style={{
+              position: "absolute",
+              left: cx - r,
+              top:  cy - r,
+              width:  r * 2,
+              height: r * 2,
+              borderRadius: "50%",
+              border: isNear
+                ? "2px solid rgba(74,222,128,0.9)"
+                : "2px solid rgba(96,165,250,0.5)",
+              background: isNear
+                ? "rgba(74,222,128,0.08)"
+                : "rgba(96,165,250,0.04)",
+              animation: isNear ? "circleActive 1.2s ease-in-out infinite" : "circleIdle 2.5s ease-in-out infinite",
+              zIndex: 8,
+              pointerEvents: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {/* Emoji label */}
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+              opacity: isNear ? 1 : 0.6,
+              transition: "opacity 0.3s ease",
+            }}>
+              <span style={{ fontSize: r * 0.35, filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.8))" }}>
+                {az.emoji}
+              </span>
+              {isNear && (
+                <span style={{
+                  fontSize: Math.max(9, r * 0.13),
+                  color: "rgba(74,222,128,0.95)",
+                  fontWeight: 700,
+                  textShadow: "0 1px 3px rgba(0,0,0,0.9)",
+                  whiteSpace: "nowrap",
+                  letterSpacing: "0.02em",
+                }}>
+                  {az.label}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
       {/* Character — stages 6-9 only */}
       {showChar && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -453,8 +824,43 @@ export default function DentistOffice() {
       {/* Hint */}
       {stage >= 4 && (
         <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40 text-white/50 text-xs animate-pulse pointer-events-none">
-          {movementUnlocked.current && !charPulse ? "Arrow keys to move" : "Press any key to continue"}
+          {nearbyZone
+            ? "Press SPACE to interact"
+            : movementUnlocked.current && !charPulse
+              ? "Arrow keys to move"
+              : "Press any key to continue"}
         </div>
+      )}
+
+      {/* Habit Coach prompt */}
+      <HabitCoachPrompt
+        isOpen={activeAgent === "habit"}
+        onClose={() => setActiveAgent(null)}
+        isLoading={habitLoading}
+        analysisResult={habitResult}
+        onAnalyze={(medications) =>
+          startHabitAnalysis(async () => {
+            const res = await fetch("http://localhost:8000/agents/habit-coaching/analyze", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ medications, observations: [] }),
+            });
+            const data = await res.json();
+            return data.coaching_plan ?? "Analysis complete.";
+          })
+        }
+      />
+
+      {/* Sun Life prompt */}
+      <SunlifePrompt
+        isOpen={sunlifeOpen}
+        onClose={closeSunlifePrompt}
+        onConfirm={() => { closeSunlifePrompt(); setActiveAgent("financial"); }}
+      />
+
+      {/* Generic agent modal (clinic + financial details) */}
+      {(activeAgent === "clinic" || activeAgent === "financial") && (
+        <AgentModal agentId={activeAgent} onClose={() => setActiveAgent(null)} />
       )}
     </div>
   );

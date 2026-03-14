@@ -24,13 +24,14 @@ function groupByDay(slots: { start: string; end: string }[] = []) {
 export default function ChatPage() {
   const { data: session, status } = useSession();
   const { location, loading: locLoading } = useGeolocation();
-  const googleToken = (session as { access_token?: string } | null)?.access_token ?? "";
+  const googleToken  = (session as { access_token?: string } | null)?.access_token ?? "";
+  const refreshToken = (session as { refresh_token?: string } | null)?.refresh_token;
 
   const {
     step, clinics, selectedClinic, slots, bookedEvent,
     loading, error,
     findClinics, getSlots, book, reset,
-  } = useWizard(location, googleToken);
+  } = useWizard(location, googleToken, refreshToken);
 
   if (status === "loading") return null;
 

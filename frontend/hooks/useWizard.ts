@@ -29,7 +29,7 @@ export interface BookedEvent {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export function useWizard(location: Location | null, googleToken: string) {
+export function useWizard(location: Location | null, googleToken: string, refreshToken?: string) {
   const [step, setStep] = useState<WizardStep>("find_clinics");
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
@@ -67,7 +67,7 @@ export function useWizard(location: Location | null, googleToken: string) {
       const res = await fetch(`${API}/agents/clinic-locator/wizard/get-slots`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ google_token: googleToken }),
+        body: JSON.stringify({ google_token: googleToken, refresh_token: refreshToken }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to get slots");
@@ -91,6 +91,7 @@ export function useWizard(location: Location | null, googleToken: string) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           google_token: googleToken,
+          refresh_token: refreshToken,
           clinic_name: selectedClinic.name,
           clinic_address: selectedClinic.address,
           start_datetime: slot.start,

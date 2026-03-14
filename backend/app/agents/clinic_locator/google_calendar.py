@@ -1,4 +1,6 @@
+import os
 from datetime import datetime, timedelta
+from typing import Optional
 from zoneinfo import ZoneInfo
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
@@ -6,17 +8,23 @@ from google.oauth2.credentials import Credentials
 CLINIC_TZ = ZoneInfo("America/Toronto")
 
 
-def _calendar_service(google_token: str):
-    creds = Credentials(token=google_token)
+def _calendar_service(google_token: str, refresh_token: Optional[str] = None):
+    creds = Credentials(
+        token=google_token,
+        refresh_token=refresh_token or None,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+        client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+    )
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
 
-def get_free_slots(google_token: str, start_date: str, end_date: str) -> list[dict]:
+def get_free_slots(google_token: str, start_date: str, end_date: str, refresh_token: Optional[str] = None) -> list[dict]:
     """
     Return 30-minute free slots Mon–Fri 8am–5pm Toronto time.
     start_date / end_date: ISO date strings like '2026-03-13'.
     """
-    service = _calendar_service(google_token)
+    service = _calendar_service(google_token, refresh_token)
 
     # Query freebusy in UTC but spanning the full local days
     time_min = datetime.fromisoformat(start_date).replace(
@@ -78,9 +86,10 @@ def create_event(
     clinic_address: str,
     start_datetime: str,
     end_datetime: str,
+    refresh_token: Optional[str] = None,
 ) -> dict:
     """Create a Google Calendar event for the appointment."""
-    service = _calendar_service(google_token)
+    service = _calendar_service(google_token, refresh_token)
 
     event = {
         "summary": f"Dental Appointment at {clinic_name}",

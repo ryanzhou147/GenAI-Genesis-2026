@@ -27,12 +27,14 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, account }: { token: JWT; account: Account | null }) {
       if (account) {
         token.access_token = account.access_token;
+        token.refresh_token = account.refresh_token;
       }
       return token;
     },
     async session({ session, token }: { session: Session; token: JWT }) {
-      (session as Session & { access_token?: string }).access_token =
-        token.access_token as string;
+      const s = session as Session & { access_token?: string; refresh_token?: string };
+      s.access_token = token.access_token as string;
+      s.refresh_token = token.refresh_token as string | undefined;
       return session;
     },
   },

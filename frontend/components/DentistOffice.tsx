@@ -59,64 +59,32 @@ const FLASH_DURATION = 2000; // ms — camera flash + fade
 
 // ── Agent Modal ───────────────────────────────────────────────────────────────
 
-type AgentStep = { label: string; done: boolean };
-
 function AgentModal({ agentId, onClose }: { agentId: string; onClose: () => void }) {
   const zone = AGENT_ZONES.find((z) => z.id === agentId)!;
 
-  const STEPS: Record<string, AgentStep[]> = {
-    habit: [
-      { label: "Reviewing dental scan analysis…", done: false },
-      { label: "Identifying hygiene gaps…", done: false },
-      { label: "Generating personalized coaching plan…", done: false },
-    ],
-    clinic: [
-      { label: "Detecting your location…", done: false },
-      { label: "Searching nearby dental clinics…", done: false },
-      { label: "Checking calendar availability…", done: false },
-    ],
-    financial: [
-      { label: "Analyzing treatment costs…", done: false },
-      { label: "Reviewing insurance coverage…", done: false },
-      { label: "Calculating out-of-pocket estimates…", done: false },
-    ],
-  };
-
-  const [steps, setSteps] = useState<AgentStep[]>(STEPS[agentId] ?? []);
   const [result, setResult] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showClinic, setShowClinic] = useState(false);
 
   useEffect(() => {
-    // Animate steps sequentially then fetch API
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    steps.forEach((_, i) => {
-      timers.push(setTimeout(() => {
-        setSteps((prev) => prev.map((s, j) => j === i ? { ...s, done: true } : s));
-      }, 900 * (i + 1)));
-    });
+    const endpointMap: Record<string, string> = {
+      clinic:    "http://localhost:8000/agents/clinic-locator",
+      financial: "http://localhost:8000/agents/financial/analyze",
+    };
+    const endpoint = endpointMap[agentId];
+    if (!endpoint) { setLoading(false); return; }
 
-    // After all steps, fetch the agent
-    const delay = 900 * (steps.length + 1);
-    timers.push(setTimeout(async () => {
-      const endpointMap: Record<string, string> = {
-        habit:     "http://localhost:8000/agents/habit-coaching",
-        clinic:    "http://localhost:8000/agents/clinic-locator",
-        financial: "http://localhost:8000/agents/financial",
-      };
-      try {
-        const res = await fetch(endpointMap[agentId]);
-        const data = await res.json();
-        setResult(JSON.stringify(data, null, 2));
-      } catch {
-        setResult("Agent ready.");
-      }
-    }, delay));
-
-    return () => timers.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const isPost = agentId === "financial";
+    fetch(endpoint, isPost ? {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: "What Sun Life dental plan best covers my treatment?" }),
+    } : undefined)
+      .then((r) => r.json())
+      .then((data) => setResult(data.recommendation ?? JSON.stringify(data, null, 2)))
+      .catch(() => setResult("Agent ready."))
+      .finally(() => setLoading(false));
   }, [agentId]);
-
-  const allDone = steps.every((s) => s.done);
 
   return (
     <div
@@ -174,96 +142,27 @@ function AgentModal({ agentId, onClose }: { agentId: string; onClose: () => void
           </div>
         ) : (
           <div style={{ padding: "24px" }}>
-            {/* Workflow steps */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-              {steps.map((step, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 10,
-                    opacity: step.done ? 1 : i === steps.findIndex((s) => !s.done) ? 0.85 : 0.35,
-                    transition: "opacity 0.4s ease",
-                  }}
-                >
-                  <div style={{
-                    width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                    background: step.done ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.05)",
-                    border: step.done
-                      ? "1.5px solid rgba(74,222,128,0.8)"
-                      : i === steps.findIndex((s) => !s.done)
-                        ? "1.5px solid rgba(96,165,250,0.8)"
-                        : "1.5px solid rgba(255,255,255,0.15)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 11,
-                    animation: !step.done && i === steps.findIndex((s) => !s.done)
-                      ? "stepPulse 1.2s ease-in-out infinite" : undefined,
-                  }}>
-                    {step.done ? "✓" : ""}
-                  </div>
-                  <span style={{
-                    color: step.done ? "rgba(74,222,128,0.9)" : "rgba(255,255,255,0.75)",
-                    fontSize: 13,
-                  }}>
-                    {step.label}
-                    {!step.done && i === steps.findIndex((s) => !s.done) && (
-                      <span style={{ marginLeft: 4, opacity: 0.6 }}>
-                        <span style={{ animation: "dot1 1.2s ease-in-out infinite" }}>.</span>
-                        <span style={{ animation: "dot2 1.2s ease-in-out infinite" }}>.</span>
-                        <span style={{ animation: "dot3 1.2s ease-in-out infinite" }}>.</span>
-                      </span>
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {loading && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>
+                <div style={{
+                  width: 18, height: 18, borderRadius: "50%",
+                  border: "2px solid rgba(96,165,250,0.3)",
+                  borderTopColor: "rgba(96,165,250,0.9)",
+                  animation: "spin 0.8s linear infinite",
+                  flexShrink: 0,
+                }} />
+                Contacting agent…
+              </div>
+            )}
 
-            {/* Result */}
-            {allDone && result && (
+            {!loading && result && (
               <div style={{
                 background: "rgba(255,255,255,0.04)",
                 border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 12,
-                padding: "16px",
+                borderRadius: 12, padding: "16px",
                 animation: "fadeInUp 0.4s ease forwards",
               }}>
-                {agentId === "habit" && (
-                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, lineHeight: 1.7 }}>
-                    <div style={{ color: "rgba(74,222,128,0.9)", fontWeight: 700, marginBottom: 10, fontSize: 14 }}>
-                      Coaching Plan Ready
-                    </div>
-                    <ul style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: 6 }}>
-                      <li>Brush for 2 minutes, twice daily with fluoride toothpaste</li>
-                      <li>Floss at least once per day — prioritize before bedtime</li>
-                      <li>Rinse with antiseptic mouthwash to reduce plaque</li>
-                      <li>Reduce sugary snacks between meals</li>
-                      <li>Schedule a cleaning every 6 months</li>
-                    </ul>
-                  </div>
-                )}
-                {agentId === "financial" && (
-                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, lineHeight: 1.7 }}>
-                    <div style={{ color: "rgba(74,222,128,0.9)", fontWeight: 700, marginBottom: 10, fontSize: 14 }}>
-                      Cost Estimate
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      {[
-                        ["Cleaning & Exam", "$180", "$0"],
-                        ["Cavity Filling (×2)", "$420", "$84"],
-                        ["X-Rays", "$90", "$18"],
-                        ["Total Estimate", "$690", "$102"],
-                      ].map(([item, cost, oop]) => (
-                        <div key={item} style={{ display: "contents" }}>
-                          <span style={{ opacity: 0.7 }}>{item}</span>
-                          <span style={{ textAlign: "right" }}>
-                            <span style={{ opacity: 0.5, textDecoration: "line-through", marginRight: 8 }}>{cost}</span>
-                            <span style={{ color: "rgba(74,222,128,0.9)", fontWeight: 600 }}>{oop} OOP</span>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {agentId === "clinic" && (
+                {agentId === "clinic" ? (
                   <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 13, lineHeight: 1.7 }}>
                     <div style={{ color: "rgba(74,222,128,0.9)", fontWeight: 700, marginBottom: 10, fontSize: 14 }}>
                       Agent Ready
@@ -279,11 +178,14 @@ function AgentModal({ agentId, onClose }: { agentId: string; onClose: () => void
                         borderRadius: 10, padding: "10px 20px",
                         color: "rgba(147,197,253,1)", cursor: "pointer",
                         fontSize: 13, fontWeight: 600,
-                        transition: "background 0.2s ease",
                       }}
                     >
                       Open Clinic Finder →
                     </button>
+                  </div>
+                ) : (
+                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
+                    {result}
                   </div>
                 )}
               </div>
@@ -293,13 +195,9 @@ function AgentModal({ agentId, onClose }: { agentId: string; onClose: () => void
       </div>
 
       <style>{`
-        @keyframes stepPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(96,165,250,0.4); }
-          50%       { box-shadow: 0 0 0 4px rgba(96,165,250,0.15); }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
-        @keyframes dot1 { 0%,60%,100% { opacity:0 } 20% { opacity:1 } }
-        @keyframes dot2 { 0%,80%,100% { opacity:0 } 40% { opacity:1 } }
-        @keyframes dot3 { 0%,100% { opacity:0 } 60% { opacity:1 } }
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }

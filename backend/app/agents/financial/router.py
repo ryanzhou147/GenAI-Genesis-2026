@@ -1,6 +1,74 @@
+import os
 from fastapi import APIRouter
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/agents/financial", tags=["Financial Agent"])
+
+SUN_LIFE_URL = "https://www.sunlife.ca/en/explore-products/insurance/health-insurance/personal-health-insurance/dental-insurance/"
+
+# Pre-scraped fallback (Axios/requests gets 403 from Sun Life's CDN)
+SCRAPED_CONTENT_FALLBACK = """
+### PHI Basic Plan
+- Preventative Dental care: 60% reimbursement.
+- Annual Maximum: $500.
+- Recall Visits: Every 9 months.
+- Waiting Period: 3 months.
+- Restorative & Orthodontics: No coverage.
+
+### PHI Standard Plan
+- Preventative Dental care: 70% reimbursement.
+- Annual Maximum: $750.
+- Recall Visits: Every 9 months.
+- Waiting Period: 3 months.
+- Restorative & Orthodontics: No coverage.
+
+### PHI Enhanced Plan
+- Preventative Dental care: 80% reimbursement ($750 annual maximum).
+- Restorative Dental care: 50% reimbursement ($500 annual maximum).
+- Orthodontics (including braces): 60% reimbursement ($1,500 lifetime maximum).
+- Recall Visits: Every 9 months.
+- Waiting Periods: 3 months (preventative), 1 year (restorative), 2 years (orthodontic).
+"""
+
+SYSTEM_PROMPT = """You are SunLife Financial Agent, an AI insurance advisor embedded inside a virtual dental clinic application.
+
+Your purpose is to help users understand which Sun Life insurance plan best supports their dental or orthodontic treatment.
+
+Responsibilities:
+1. Analyze information from Sun Life insurance documentation.
+2. Identify which Sun Life plans include dental or orthodontic coverage.
+3. Compare plans and determine which is most suitable for the user's dental needs.
+4. Explain coverage clearly, including reimbursements, limitations, waiting periods, and cost implications.
+
+Rules:
+- Only use information from Sun Life sources.
+- Do not invent insurance policies or numbers.
+- Do not present yourself as a licensed financial advisor.
+
+Required response format:
+SUN LIFE PLAN RECOMMENDATION
+
+User Need:
+(short explanation)
+
+Recommended Plan:
+(plan name)
+
+Why This Plan Fits:
+(clear reasoning)
+
+Coverage Details:
+- Orthodontic coverage
+- Reimbursement percentage
+- Lifetime maximum
+- Waiting period
+- Other relevant benefits
+
+Estimated Cost Insight:
+(plain-language estimate)
+
+Source Reference:
+Sun Life Personal Health Insurance — sunlife.ca"""
 
 
 @router.get("")
@@ -8,5 +76,77 @@ def get_financial_agent() -> dict[str, object]:
     return {
         "agent": "financial",
         "goal": "Estimate insurance coverage and treatment cost exposure.",
-        "status": "scaffolded",
+        "status": "active",
     }
+
+
+class FinancialAnalyzeRequest(BaseModel):
+    question: str = "What Sun Life dental plan best covers my treatment?"
+
+
+@router.post("/analyze")
+async def analyze_financial(req: FinancialAnalyzeRequest) -> dict:
+    # 1. Try live scrape, fall back to pre-scraped content
+    scraped_content = await _scrape_sunlife()
+
+    # 2. Call Gemini
+    try:
+        import google.generativeai as genai  # type: ignore
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY not set")
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+
+        prompt = (
+            f"User Question: {req.question}\n\n"
+            f"Below is live content retrieved from Sun Life's website ({SUN_LIFE_URL}).\n"
+            "Analyze it and provide the most optimal insurance recommendation:\n\n"
+            f"{scraped_content}"
+        )
+
+        response = model.generate_content(
+            [{"role": "user", "parts": [SYSTEM_PROMPT + "\n\n" + prompt]}]
+        )
+        return {
+            "recommendation": response.text,
+            "source": SUN_LIFE_URL,
+            "scraped": scraped_content != SCRAPED_CONTENT_FALLBACK,
+        }
+
+    except Exception as e:
+        return {
+            "recommendation": (
+                "Gemini is not configured. Here is the raw Sun Life plan data:\n\n"
+                + scraped_content
+            ),
+            "source": SUN_LIFE_URL,
+            "scraped": scraped_content != SCRAPED_CONTENT_FALLBACK,
+            "error": str(e),
+        }
+
+
+async def _scrape_sunlife() -> str:
+    try:
+        import httpx
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-CA,en;q=0.9",
+        }
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            r = await client.get(SUN_LIFE_URL, headers=headers)
+            if r.status_code == 200:
+                # Strip HTML tags for a plain-text pass to Gemini
+                import re
+                text = re.sub(r"<[^>]+>", " ", r.text)
+                text = re.sub(r"\s+", " ", text).strip()
+                return text[:12000]  # cap at ~12k chars
+    except Exception:
+        pass
+    return SCRAPED_CONTENT_FALLBACK

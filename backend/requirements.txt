@@ -2,7 +2,10 @@ fastapi==0.115.11
 uvicorn==0.34.0
 google-api-python-client
 google-auth
+google-genai>=0.8.0
 python-dotenv
 httpx
+Pillow>=10.0.0
+python-multipart>=0.0.9
 pytest
 pytest-asyncio

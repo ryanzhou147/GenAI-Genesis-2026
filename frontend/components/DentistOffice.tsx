@@ -264,7 +264,7 @@ export default function DentistOffice() {
     const s = stageRef.current;
 
     // Arrow keys only work after movement is unlocked
-    if (movementUnlocked.current && arrowKeys.includes(e.key)) return;
+    if (movementUnlocked.current) return;
     // Space near an agent → open modal, don't advance stage
     if ((e.key === " " || e.code === "Space") && movementUnlocked.current && nearbyZoneRef.current) return;
     if (s === 2 || s === 3) return; // upload stage

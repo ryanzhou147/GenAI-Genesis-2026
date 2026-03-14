@@ -3,13 +3,22 @@
 import { useEffect, useCallback, useState } from "react";
 
 /* ─── Types ─── */
-type CoachStep = "greeting" | "analyzing" | "results";
+type CoachStep = "greeting" | "medication" | "analyzing" | "results";
+
+const MEDICATIONS = [
+    "Acetaminophen (e.g., Tylenol)",
+    "Topical Oral Anesthetics (e.g., Orajel, Anbesol)",
+    "Orthodontic Relief Wax",
+    "High-Concentration Fluoride (e.g., Prevident)",
+    "Chlorhexidine Gluconate (e.g., Peridex)",
+    "Triamcinolone Acetonide (e.g., Kenalog in Orabase)",
+];
 
 interface HabitCoachPromptProps {
     isOpen: boolean;
     onClose: () => void;
-    /** Called when user clicks "Let's Go!" — pass in your image data or URL */
-    onAnalyze?: () => void;
+    /** Called when user completes the checklist — pass in your image data or URL */
+    onAnalyze?: (medications: string[]) => void;
     /** Pass Gemini analysis results here when ready */
     analysisResult?: string | null;
     /** Set true while waiting for Gemini response */
@@ -66,11 +75,13 @@ export function HabitCoachPrompt({
 }: HabitCoachPromptProps) {
     const [isVisible, setIsVisible] = useState(false);
     const [step, setStep] = useState<CoachStep>("greeting");
+    const [selectedMedications, setSelectedMedications] = useState<string[]>([]);
 
     // Animate in
     useEffect(() => {
         if (isOpen) {
             setStep("greeting");
+            setSelectedMedications([]);
             const id = requestAnimationFrame(() => setIsVisible(true));
             return () => cancelAnimationFrame(id);
         }
@@ -79,14 +90,14 @@ export function HabitCoachPrompt({
 
     // Move to results when analysis arrives
     useEffect(() => {
-        if (analysisResult && step === "analyzing") {
+        if (analysisResult && (step === "analyzing" || step === "medication")) {
             setStep("results");
         }
     }, [analysisResult, step]);
 
     // Sync external loading state
     useEffect(() => {
-        if (isLoading && step === "greeting") {
+        if (isLoading && (step === "greeting" || step === "medication")) {
             setStep("analyzing");
         }
     }, [isLoading, step]);
@@ -106,9 +117,19 @@ export function HabitCoachPrompt({
         }
     }, [isOpen, handleKeyDown]);
 
-    const handleAnalyze = () => {
+    const toggleMedication = (med: string) => {
+        setSelectedMedications((prev) =>
+            prev.includes(med) ? prev.filter((m) => m !== med) : [...prev, med],
+        );
+    };
+
+    const handleStartChecklist = () => {
+        setStep("medication");
+    };
+
+    const handleFinishChecklist = () => {
         setStep("analyzing");
-        onAnalyze?.();
+        onAnalyze?.(selectedMedications);
     };
 
     if (!isOpen) return null;
@@ -237,7 +258,7 @@ export function HabitCoachPrompt({
 
                                     <div className="flex gap-4">
                                         <button
-                                            onClick={handleAnalyze}
+                                            onClick={handleStartChecklist}
                                             className="flex-1 transition-all duration-150 hover:brightness-95 active:translate-y-[1px]"
                                             style={{
                                                 backgroundColor: "#C8DCC0",
@@ -273,6 +294,100 @@ export function HabitCoachPrompt({
                                             NOT NOW
                                         </button>
                                     </div>
+                                </>
+                            )}
+
+                            {/* ── Step: Medication Checklist ── */}
+                            {step === "medication" && (
+                                <>
+                                    <p
+                                        className="mb-4 text-center"
+                                        style={{
+                                            fontFamily: "'Press Start 2P', 'Courier New', monospace",
+                                            fontSize: "9px",
+                                            lineHeight: "18px",
+                                            color: "#2A3D2A",
+                                        }}
+                                    >
+                                        Do you take any of these medications?
+                                    </p>
+
+                                    <div
+                                        className="mb-6 space-y-3"
+                                        style={{
+                                            backgroundColor: "#C8DCC0",
+                                            border: "3px solid #6B8B6B",
+                                            borderRadius: "4px",
+                                            padding: "16px 14px",
+                                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25)",
+                                            maxHeight: "260px",
+                                            overflowY: "auto",
+                                        }}
+                                    >
+                                        {MEDICATIONS.map((med) => (
+                                            <label
+                                                key={med}
+                                                className="flex cursor-pointer items-start gap-4 transition-colors hover:bg-white/10"
+                                                onClick={() => toggleMedication(med)}
+                                            >
+                                                {/* Custom Pixel Checkbox */}
+                                                <div
+                                                    className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center"
+                                                    style={{
+                                                        backgroundColor: selectedMedications.includes(med)
+                                                            ? "#5A7A5A"
+                                                            : "#E8F0E8",
+                                                        border: "2px solid #4A6B4A",
+                                                        borderRadius: "2px",
+                                                        boxShadow: "1px 1px 0 rgba(0,0,0,0.1)",
+                                                    }}
+                                                >
+                                                    {selectedMedications.includes(med) && (
+                                                        <span
+                                                            style={{
+                                                                color: "white",
+                                                                fontSize: "10px",
+                                                                fontWeight: "bold",
+                                                            }}
+                                                        >
+                                                            ✓
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span
+                                                    style={{
+                                                        fontFamily:
+                                                            "'Press Start 2P', 'Courier New', monospace",
+                                                        fontSize: "8px",
+                                                        lineHeight: "16px",
+                                                        color: "#2A3D2A",
+                                                        userSelect: "none",
+                                                    }}
+                                                >
+                                                    {med}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
+
+                                    <button
+                                        onClick={handleFinishChecklist}
+                                        className="w-full transition-all duration-150 hover:brightness-95 active:translate-y-[1px]"
+                                        style={{
+                                            backgroundColor: "#C8DCC0",
+                                            border: "3px solid #6B8B6B",
+                                            borderRadius: "4px",
+                                            padding: "12px 0",
+                                            fontFamily: "'Press Start 2P', 'Courier New', monospace",
+                                            fontSize: "11px",
+                                            color: "#2A3D2A",
+                                            cursor: "pointer",
+                                            boxShadow:
+                                                "0 3px 0 #3D5A3D, inset 0 1px 0 rgba(255,255,255,0.25)",
+                                        }}
+                                    >
+                                        DONE
+                                    </button>
                                 </>
                             )}
 

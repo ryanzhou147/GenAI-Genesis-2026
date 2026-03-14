@@ -43,18 +43,24 @@ export function useWizard(location: Location | null, googleToken: string, refres
     if (!location) return;
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
     try {
       const res = await fetch(`${API}/agents/clinic-locator/wizard/find-clinics`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lat: location.lat, lng: location.lng }),
+        signal: controller.signal,
       });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
       const data = await res.json();
-      setClinics(data.clinics);
+      setClinics(data.clinics ?? []);
       setStep("select_clinic");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to find clinics");
+      const msg = e instanceof Error ? e.message : "Failed to find clinics";
+      setError(controller.signal.aborted ? "Request timed out — is the backend running?" : msg);
     } finally {
+      clearTimeout(timer);
       setLoading(false);
     }
   }

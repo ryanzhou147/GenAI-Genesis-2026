@@ -26,6 +26,7 @@ export default function ChatPage() {
   const { location, loading: locLoading } = useGeolocation();
   const googleToken  = (session as { access_token?: string } | null)?.access_token ?? "";
   const refreshToken = (session as { refresh_token?: string } | null)?.refresh_token;
+  const tokenError   = (session as { error?: string } | null)?.error;
 
   const {
     step, clinics, selectedClinic, slots, bookedEvent,
@@ -34,6 +35,21 @@ export default function ChatPage() {
   } = useWizard(location, googleToken, refreshToken);
 
   if (status === "loading") return null;
+
+  if (tokenError === "RefreshAccessTokenError") {
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center">
+        <div className="text-center max-w-sm px-6">
+          <div className="text-5xl mb-4">🔑</div>
+          <h2 className="text-xl font-semibold text-ink mb-2">Session expired</h2>
+          <p className="text-ink/60 text-sm mb-6">Please sign in again to continue.</p>
+          <button onClick={() => signIn("google")} className="bg-ink text-white font-medium px-6 py-3 rounded-xl hover:bg-ink/80 transition-colors">
+            Sign in with Google
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!session) {
     return (

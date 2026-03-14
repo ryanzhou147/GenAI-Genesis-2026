@@ -26,13 +26,14 @@ class HabitAnalyzeRequest(BaseModel):
 @router.post("/analyze")
 def analyze_habits(req: HabitAnalyzeRequest) -> dict:
     try:
-        import google.generativeai as genai  # type: ignore
+        from google import genai as google_genai  # type: ignore
+        from google.genai import types as genai_types  # type: ignore
+
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY not set")
 
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        client = google_genai.Client(api_key=api_key)
 
         meds_str = ", ".join(req.medications) if req.medications else "None reported"
         obs_str  = ", ".join(req.observations) if req.observations else "General dental wellness"
@@ -46,7 +47,13 @@ def analyze_habits(req: HabitAnalyzeRequest) -> dict:
             "Format as a numbered list."
         )
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
         return {"coaching_plan": response.text}
 
     except Exception:

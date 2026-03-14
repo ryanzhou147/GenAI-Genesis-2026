@@ -62,29 +62,18 @@ const FLASH_DURATION = 2000; // ms — camera flash + fade
 
 function AgentModal({ agentId, onClose }: { agentId: string; onClose: () => void }) {
   const zone = AGENT_ZONES.find((z) => z.id === agentId)!;
-
-  const [result, setResult] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showClinic, setShowClinic] = useState(false);
+  const [financialResult, setFinancialResult] = useState<string | null>(null);
 
   useEffect(() => {
-    const endpointMap: Record<string, string> = {
-      clinic:    "http://localhost:8000/agents/clinic-locator",
-      financial: "http://localhost:8000/agents/financial/analyze",
-    };
-    const endpoint = endpointMap[agentId];
-    if (!endpoint) { setLoading(false); return; }
-
-    const isPost = agentId === "financial";
-    fetch(endpoint, isPost ? {
+    if (agentId !== "financial") return;
+    fetch("http://localhost:8000/agents/financial/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question: "What Sun Life dental plan best covers my treatment?" }),
-    } : undefined)
+    })
       .then((r) => r.json())
-      .then((data) => setResult(data.recommendation ?? JSON.stringify(data, null, 2)))
-      .catch(() => setResult("Agent ready."))
-      .finally(() => setLoading(false));
+      .then((data) => setFinancialResult(data.recommendation ?? JSON.stringify(data, null, 2)))
+      .catch(() => setFinancialResult("Unable to reach financial agent."));
   }, [agentId]);
 
   return (
@@ -102,9 +91,9 @@ function AgentModal({ agentId, onClose }: { agentId: string; onClose: () => void
           background: "rgba(8,10,20,0.97)",
           border: "1.5px solid rgba(255,255,255,0.12)",
           borderRadius: 20,
-          width: showClinic ? "min(90vw, 780px)" : "min(90vw, 560px)",
-          maxHeight: showClinic ? "85vh" : undefined,
-          overflow: showClinic ? "hidden" : undefined,
+          width: agentId === "clinic" ? "min(90vw, 780px)" : "min(90vw, 560px)",
+          maxHeight: "85vh",
+          overflow: "hidden",
           boxShadow: "0 0 60px rgba(96,165,250,0.15), 0 8px 40px rgba(0,0,0,0.6)",
           display: "flex", flexDirection: "column",
         }}
@@ -120,9 +109,7 @@ function AgentModal({ agentId, onClose }: { agentId: string; onClose: () => void
             <span style={{ fontSize: 24 }}>{zone.emoji}</span>
             <div>
               <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{zone.label}</div>
-              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 1 }}>
-                AI Agent · {agentId === "clinic" ? "Active" : agentId === "habit" ? "Implemented" : "Scaffolded"}
-              </div>
+              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 1 }}>AI Agent · Active</div>
             </div>
           </div>
           <button
@@ -136,71 +123,27 @@ function AgentModal({ agentId, onClose }: { agentId: string; onClose: () => void
           >✕</button>
         </div>
 
-        {/* Clinic full UI */}
-        {showClinic ? (
+        {/* Clinic — straight into ChatPage */}
+        {agentId === "clinic" && (
           <div style={{ overflowY: "auto", flex: 1 }}>
             <ChatPage />
           </div>
-        ) : (
-          <div style={{ padding: "24px" }}>
-            {loading && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>
-                <div style={{
-                  width: 18, height: 18, borderRadius: "50%",
-                  border: "2px solid rgba(96,165,250,0.3)",
-                  borderTopColor: "rgba(96,165,250,0.9)",
-                  animation: "spin 0.8s linear infinite",
-                  flexShrink: 0,
-                }} />
-                Contacting agent…
-              </div>
-            )}
+        )}
 
-            {!loading && result && (
-              <div style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 12, padding: "16px",
-                animation: "fadeInUp 0.4s ease forwards",
-              }}>
-                {agentId === "clinic" ? (
-                  <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 13, lineHeight: 1.7 }}>
-                    <div style={{ color: "rgba(74,222,128,0.9)", fontWeight: 700, marginBottom: 10, fontSize: 14 }}>
-                      Agent Ready
-                    </div>
-                    <p style={{ marginBottom: 14 }}>
-                      The Clinic Locator will find dental clinics near you and help schedule an appointment on your Google Calendar.
-                    </p>
-                    <button
-                      onClick={() => setShowClinic(true)}
-                      style={{
-                        background: "rgba(96,165,250,0.15)",
-                        border: "1.5px solid rgba(96,165,250,0.5)",
-                        borderRadius: 10, padding: "10px 20px",
-                        color: "rgba(147,197,253,1)", cursor: "pointer",
-                        fontSize: 13, fontWeight: 600,
-                      }}
-                    >
-                      Open Clinic Finder →
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
-                    {result}
-                  </div>
-                )}
-              </div>
-            )}
+        {/* Financial — show immediately, result streams in */}
+        {agentId === "financial" && (
+          <div style={{ overflowY: "auto", flex: 1, padding: "24px" }}>
+            <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, lineHeight: 1.8, whiteSpace: "pre-wrap", animation: "fadeInUp 0.3s ease" }}>
+              {financialResult ?? "Analyzing your Sun Life plan…"}
+            </div>
           </div>
         )}
       </div>
 
       <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(8px); }
+          from { opacity: 0; transform: translateY(6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
@@ -760,11 +703,14 @@ export default function DentistOffice() {
       <SunlifePrompt
         isOpen={sunlifeOpen}
         onClose={closeSunlifePrompt}
-        onConfirm={() => { closeSunlifePrompt(); setActiveAgent("financial"); }}
+        onConfirm={() => {
+          closeSunlifePrompt();
+          window.open("/financial-agent", "_blank", "popup,width=900,height=700,noopener");
+        }}
       />
 
-      {/* Generic agent modal (clinic + financial details) */}
-      {(activeAgent === "clinic" || activeAgent === "financial") && (
+      {/* Generic agent modal (clinic) */}
+      {activeAgent === "clinic" && (
         <AgentModal agentId={activeAgent} onClose={() => setActiveAgent(null)} />
       )}
     </div>

@@ -1,3 +1,4 @@
+import asyncio
 import os
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -86,6 +87,16 @@ class FinancialAnalyzeRequest(BaseModel):
 
 @router.post("/analyze")
 async def analyze_financial(req: FinancialAnalyzeRequest) -> dict:
+    # Pull latest financial-testing branch (fire-and-forget, non-blocking)
+    try:
+        await asyncio.create_subprocess_exec(
+            "git", "pull", "origin", "financial-testing",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
     # 1. Try live scrape, fall back to pre-scraped content
     scraped_content = await _scrape_sunlife()
 

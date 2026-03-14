@@ -1,10 +1,19 @@
+import * as dotenv from "dotenv";
 import { SunLifeFinancialAgent } from "../agent.js";
 import { SunLifeWebRetriever } from "../retriever.js";
 import { GeminiLlmClient } from "../gemini.js";
 import type { WebScraper } from "../types.js";
 
+// Load environment variables from .env file
+dotenv.config();
+
 async function main() {
-  const GEMINI_API_KEY = "AIzaSyDDbXmRDcwUBr7epX5lV3NqhQNasnSz7jA";
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+  if (!GEMINI_API_KEY) {
+    console.error("Error: GEMINI_API_KEY not found in environment variables (.env file).");
+    process.exit(1);
+  }
 
   console.log("--- Sun Life Financial Agent (LIVE WEB + GEMINI) Test ---\n");
 

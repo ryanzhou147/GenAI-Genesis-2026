@@ -11,7 +11,7 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-function groupByDay(slots: { start: string; end: string }[]) {
+function groupByDay(slots: { start: string; end: string }[] = []) {
   const groups: Record<string, { start: string; end: string }[]> = {};
   for (const slot of slots) {
     const day = formatDate(slot.start);

@@ -70,7 +70,8 @@ export function useWizard(location: Location | null, googleToken: string) {
         body: JSON.stringify({ google_token: googleToken }),
       });
       const data = await res.json();
-      setSlots(data.slots);
+      if (!res.ok) throw new Error(data.detail ?? "Failed to get slots");
+      setSlots(data.slots ?? []);
       setStep("get_slots");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to get slots");

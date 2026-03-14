@@ -1,6 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+
+CLINIC_TZ = ZoneInfo("America/Toronto")
 
 
 def _calendar_service(google_token: str):
@@ -10,23 +13,26 @@ def _calendar_service(google_token: str):
 
 def get_free_slots(google_token: str, start_date: str, end_date: str) -> list[dict]:
     """
-    Return 30-minute free slots Mon–Fri 8am–5pm (user's primary calendar).
+    Return 30-minute free slots Mon–Fri 8am–5pm Toronto time.
     start_date / end_date: ISO date strings like '2026-03-13'.
     """
     service = _calendar_service(google_token)
 
-    time_min = f"{start_date}T00:00:00Z"
-    time_max = f"{end_date}T23:59:59Z"
+    # Query freebusy in UTC but spanning the full local days
+    time_min = datetime.fromisoformat(start_date).replace(
+        hour=0, minute=0, second=0, tzinfo=CLINIC_TZ
+    ).isoformat()
+    time_max = datetime.fromisoformat(end_date).replace(
+        hour=23, minute=59, second=59, tzinfo=CLINIC_TZ
+    ).isoformat()
 
-    body = {
+    freebusy = service.freebusy().query(body={
         "timeMin": time_min,
         "timeMax": time_max,
         "items": [{"id": "primary"}],
-    }
-    freebusy = service.freebusy().query(body=body).execute()
-    busy_periods = freebusy["calendars"]["primary"]["busy"]
+    }).execute()
 
-    # Build busy intervals as datetime objects (UTC)
+    busy_periods = freebusy["calendars"]["primary"]["busy"]
     busy = []
     for p in busy_periods:
         busy.append((
@@ -34,9 +40,9 @@ def get_free_slots(google_token: str, start_date: str, end_date: str) -> list[di
             datetime.fromisoformat(p["end"].replace("Z", "+00:00")),
         ))
 
-    # Generate candidate 30-min slots
-    start_dt = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
-    end_dt = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc)
+    # Generate 30-min slots 8am–5pm Toronto time
+    start_dt = datetime.fromisoformat(start_date)
+    end_dt = datetime.fromisoformat(end_date)
 
     slots = []
     current = start_dt
@@ -44,7 +50,10 @@ def get_free_slots(google_token: str, start_date: str, end_date: str) -> list[di
         if current.weekday() < 5:  # Mon–Fri
             for hour in range(8, 17):
                 for minute in (0, 30):
-                    slot_start = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    slot_start = datetime(
+                        current.year, current.month, current.day,
+                        hour, minute, 0, tzinfo=CLINIC_TZ
+                    )
                     slot_end = slot_start + timedelta(minutes=30)
                     if not _overlaps_busy(slot_start, slot_end, busy):
                         slots.append({
@@ -76,9 +85,9 @@ def create_event(
     event = {
         "summary": f"Dental Appointment at {clinic_name}",
         "location": clinic_address,
-        "description": f"Dental appointment booked via Clinic Locator agent.",
-        "start": {"dateTime": start_datetime, "timeZone": "UTC"},
-        "end": {"dateTime": end_datetime, "timeZone": "UTC"},
+        "description": "Dental appointment booked via Clinic Locator agent.",
+        "start": {"dateTime": start_datetime, "timeZone": "America/Toronto"},
+        "end": {"dateTime": end_datetime, "timeZone": "America/Toronto"},
     }
 
     created = service.events().insert(calendarId="primary", body=event).execute()
@@ -92,6 +101,5 @@ def create_event(
 
 
 def delete_event(google_token: str, event_id: str) -> None:
-    """Delete a calendar event by ID (used in tests)."""
     service = _calendar_service(google_token)
     service.events().delete(calendarId="primary", eventId=event_id).execute()

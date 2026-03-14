@@ -522,9 +522,6 @@ export default function DoctorPage() {
                 {/* Patient header */}
                 <div style={panelStyle()}>
                   <div style={{ padding: "12px 18px", display: "flex", alignItems: "center", gap: 16 }}>
-                    <div style={{ width: 64, height: 64, border: `4px solid ${C.border}`, flexShrink: 0, overflow: "hidden", background: C.bgDeep }}>
-                      <img src={selected.imageUrl} alt={selected.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    </div>
                     <div>
                       <p style={{ fontSize: "12px", color: C.text, marginBottom: "6px" }}>{selected.name}</p>
                       <p style={{ fontSize: "7px", color: C.muted, lineHeight: "2.2" }}>

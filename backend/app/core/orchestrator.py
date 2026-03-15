@@ -17,6 +17,19 @@ def get_orchestrator() -> dict[str, object]:
     }
 
 
+@router.get("/railtown")
+async def get_railtown_probe() -> dict[str, object]:
+    """
+    Minimal Railtracks integration probe.
+
+    This route is intentionally additive and does not participate in the main
+    patient flow, which keeps the current app behavior unchanged.
+    """
+    from app.core.railtracks_probe import run_orchestrator_probe
+
+    return await run_orchestrator_probe()
+
+
 @router.post("/patient-analyze")
 async def patient_analyze(
     name: str = Form(...),

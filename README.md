@@ -49,7 +49,7 @@ The system uses an `Agent Orchestrator` to coordinate the six main agents in the
 flowchart LR
     U[Agent Orchestrator]
 
-    V[Vision / Intake Agent]
+    V[Visual Agent]
     F[Financial Agent]
     H[Habit Coaching Agent]
     Sx[Surgery Agent]

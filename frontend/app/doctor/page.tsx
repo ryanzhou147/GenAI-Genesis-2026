@@ -165,7 +165,7 @@ const MOCK_PATIENTS: Patient[] = [
         notes: "Primary concern is cavity management — patient presents with four active sites of decay. Orthodontic treatment is not suitable until all cavities are treated and oral hygiene is significantly improved.",
       },
       timeline: [
-        { month: 0,  label: "Current State",      image_url: "/teeth_current.png" },
+        { month: 0,  label: "Current State",      image_url: "/max_teeth.jpeg" },
         { month: 3,  label: "Fillings Placed",    image_url: "/demo_month3.png" },
         { month: 9,  label: "Healing Progress",   image_url: "/demo_month9.png" },
         { month: 15, label: "Decay Resolved",     image_url: "/demo_month15.png" },
@@ -193,7 +193,7 @@ const MOCK_PATIENTS: Patient[] = [
         notes: "Patient has generally healthy teeth with good enamel and no decay. Orthodontic treatment is straightforward — minor alignment correction expected to produce excellent results.",
       },
       timeline: [
-        { month: 0,  label: "Current Teeth",     image_url: "/teeth_current.png" },
+        { month: 0,  label: "Current Teeth",     image_url: "/sarah_teeth.jpg" },
         { month: 3,  label: "Braces Applied",     image_url: "/demo_month3.png" },
         { month: 6,  label: "Early Movement",     image_url: "/demo_month9.png" },
         { month: 10, label: "Almost There",       image_url: "/demo_month15.png" },
